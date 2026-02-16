@@ -115,3 +115,6 @@ function randomEvent() {
 }
 
 setInterval(randomEvent, 15000);
+if (!c.trend) c.trend = 0;
+c.trend += (Math.random() - 0.5) * 0.02;
+let change = (c.trend + (Math.random() - 0.5) * c.volatility) * c.price * c.hype;
