@@ -1,0 +1,96 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Meme Coin Chaos</title>
+<style>
+body {
+  font-family: Arial;
+  background: #111;
+  color: #fff;
+  text-align: center;
+}
+.coin {
+  margin: 20px;
+  padding: 10px;
+  border: 1px solid #444;
+}
+button {
+  padding: 5px 10px;
+  margin: 5px;
+}
+</style>
+</head>
+<body>
+
+<h1>Meme Coin Chaos</h1>
+<h3>Cash: $<span id="cash">1000</span></h3>
+<h3>Net Worth: $<span id="networth">1000</span></h3>
+
+<div id="coins"></div>
+
+<script>
+let cash = 1000;
+
+let coins = [
+  { name: "DogeLordX", price: 1, volatility: 0.2, hype: 1 },
+  { name: "QuantumPepe", price: 2, volatility: 0.3, hype: 1 },
+  { name: "MoonRaccoon", price: 0.5, volatility: 0.5, hype: 1 }
+];
+
+coins.forEach(c => c.holdings = 0);
+
+function updatePrices() {
+  coins.forEach(c => {
+    let change = (Math.random() - 0.5) * c.volatility * c.price * c.hype;
+    c.price += change;
+    if (c.price < 0.01) c.price = 0.01;
+  });
+  render();
+}
+
+function render() {
+  let container = document.getElementById("coins");
+  container.innerHTML = "";
+  let net = cash;
+
+  coins.forEach((c, index) => {
+    net += c.holdings * c.price;
+
+    container.innerHTML += `
+      <div class="coin">
+        <h2>${c.name}</h2>
+        <p>Price: $${c.price.toFixed(2)}</p>
+        <p>Owned: ${c.holdings}</p>
+        <button onclick="buy(${index})">Buy</button>
+        <button onclick="sell(${index})">Sell</button>
+      </div>
+    `;
+  });
+
+  document.getElementById("cash").innerText = cash.toFixed(2);
+  document.getElementById("networth").innerText = net.toFixed(2);
+}
+
+function buy(i) {
+  if (cash >= coins[i].price) {
+    cash -= coins[i].price;
+    coins[i].holdings += 1;
+  }
+  render();
+}
+
+function sell(i) {
+  if (coins[i].holdings > 0) {
+    cash += coins[i].price;
+    coins[i].holdings -= 1;
+  }
+  render();
+}
+
+setInterval(updatePrices, 1000);
+render();
+</script>
+
+</body>
+</html>
