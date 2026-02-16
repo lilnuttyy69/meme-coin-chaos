@@ -94,3 +94,24 @@ render();
 
 </body>
 </html>
+function randomEvent() {
+  let coin = coins[Math.floor(Math.random() * coins.length)];
+  let eventType = Math.random();
+
+  if (eventType < 0.4) {
+    coin.hype = 3;
+    alert(`${coin.name} is trending on TikTok 🚀`);
+    setTimeout(() => coin.hype = 1, 5000);
+  } 
+  else if (eventType < 0.7) {
+    coin.price *= 0.3;
+    alert(`${coin.name} rug pull! Dev vanished.`);
+  } 
+  else {
+    coin.volatility *= 2;
+    alert(`${coin.name} whale activity detected 🐋`);
+    setTimeout(() => coin.volatility /= 2, 5000);
+  }
+}
+
+setInterval(randomEvent, 15000);
