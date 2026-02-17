@@ -6,7 +6,7 @@
 <style>
 body { font-family: Arial; background:#111; color:#fff; text-align:center; margin:0; padding:0; }
 h1 { margin:10px; }
-#news, #sentiment, #leaderboard, #portfolio-container { background:#222; padding:10px; margin:10px auto; width:90%; max-width:400px; border-radius:5px; }
+#news, #sentiment, #leaderboard, #portfolio-container, #achievements { background:#222; padding:10px; margin:10px auto; width:90%; max-width:400px; border-radius:5px; }
 .coin { margin:15px auto; padding:8px; border:0.8px solid #444; border-radius:4px; width:90%; max-width:400px; transition: color 0.3s; }
 button { padding:4px 8px; margin:4px; border:none; border-radius:3px; background:#555; color:#fff; cursor:pointer; font-size:14px;}
 button:hover { background:#777; }
@@ -19,6 +19,7 @@ canvas { margin-top:10px; background:#000; width:100%; height:100px; display:blo
 #reset-game { background:#f44336; color:#fff; }
 #reset-game:hover { background:#e57373; }
 #portfolio-value { display:inline-block; padding:0 5px; }
+#achievement-banner { background:#444; color:#fff; padding:5px 10px; border-radius:4px; margin:10px auto; display:none; max-width:300px; }
 </style>
 </head>
 <body>
@@ -29,11 +30,13 @@ canvas { margin-top:10px; background:#000; width:100%; height:100px; display:blo
 <div id="sentiment">Market Sentiment: Neutral</div>
 <div id="leaderboard"><h3>Leaderboard</h3><ol id="leaderboard-list"></ol></div>
 <div id="portfolio-container"><h3>Portfolio Value: $<span id="portfolio-value">0</span></h3><canvas id="portfolio-chart"></canvas></div>
+<div id="achievements"><h3>Achievements</h3><div id="achievement-banner"></div></div>
 
 <h3>Cash: $<span id="cash">0</span></h3>
 <h3>Net Worth: $<span id="networth">0</span></h3>
 
 <button id="tap-money">Tap to Earn $5</button>
+<button id="upgrade-tap">Upgrade Tap ($1000)</button>
 <button id="reset-game">Reset Game</button>
 
 <div id="coins"></div>
@@ -45,10 +48,13 @@ let cash = 1000;
 let coins = [];
 let portfolioHistory = [];
 let lastPortfolio = 0;
+let tapValue = 5;
+let tapUpgradeCost = 1000;
+let achievementsUnlocked = [];
 
 // ---------- Load/Save ----------
 function saveGame(){
-  localStorage.setItem(STORAGE_KEY, JSON.stringify({cash, coins, portfolioHistory}));
+  localStorage.setItem(STORAGE_KEY, JSON.stringify({cash, coins, portfolioHistory, tapValue, achievementsUnlocked}));
 }
 
 function loadGame(){
@@ -57,28 +63,30 @@ function loadGame(){
     const data = JSON.parse(saved);
     cash = data.cash || 1000;
     portfolioHistory = data.portfolioHistory || [];
+    tapValue = data.tapValue || 5;
+    achievementsUnlocked = data.achievementsUnlocked || [];
     coins = (data.coins || []).map(c => ({
       name: c.name || "Coin",
       price: c.price || 1,
-      volatility: c.volatility || 0.05,
       basePrice: c.basePrice || c.price,
+      volatility: c.volatility || 0.05,
       hype: c.hype || 1,
       history: c.history || [],
       holdings: c.holdings || 0,
       trend: c.trend || 0,
       lastPrice: c.lastPrice || c.price,
-      totalSpent: c.totalSpent || 0
+      totalSpent: c.totalSpent || 0,
+      staked: c.staked || 0
     }));
   }
-  // If empty, initialize coins
   if(coins.length===0){
     coins = [
-      {name:"DogeLordX", price:1, basePrice:1, volatility:0.05, hype:1, history:[], holdings:0, trend:0, lastPrice:1, totalSpent:0},
-      {name:"QuantumPepe", price:2, basePrice:2, volatility:0.07, hype:1, history:[], holdings:0, trend:0, lastPrice:2, totalSpent:0},
-      {name:"MoonRaccoon", price:0.5, basePrice:0.5, volatility:0.1, hype:1, history:[], holdings:0, trend:0, lastPrice:0.5, totalSpent:0},
-      {name:"AstroCat", price:0.8, basePrice:0.8, volatility:0.06, hype:1, history:[], holdings:0, trend:0, lastPrice:0.8, totalSpent:0},
-      {name:"RoboFrog", price:1.5, basePrice:1.5, volatility:0.08, hype:1, history:[], holdings:0, trend:0, lastPrice:1.5, totalSpent:0},
-      {name:"GalaxyDog", price:2, basePrice:2, volatility:0.05, hype:1, history:[], holdings:0, trend:0, lastPrice:2, totalSpent:0}
+      {name:"DogeLordX", price:1, basePrice:1, volatility:0.05, hype:1, history:[], holdings:0, trend:0, lastPrice:1, totalSpent:0, staked:0},
+      {name:"QuantumPepe", price:2, basePrice:2, volatility:0.07, hype:1, history:[], holdings:0, trend:0, lastPrice:2, totalSpent:0, staked:0},
+      {name:"MoonRaccoon", price:0.5, basePrice:0.5, volatility:0.1, hype:1, history:[], holdings:0, trend:0, lastPrice:0.5, totalSpent:0, staked:0},
+      {name:"AstroCat", price:0.8, basePrice:0.8, volatility:0.06, hype:1, history:[], holdings:0, trend:0, lastPrice:0.8, totalSpent:0, staked:0},
+      {name:"RoboFrog", price:1.5, basePrice:1.5, volatility:0.08, hype:1, history:[], holdings:0, trend:0, lastPrice:1.5, totalSpent:0, staked:0},
+      {name:"GalaxyDog", price:2, basePrice:2, volatility:0.05, hype:1, history:[], holdings:0, trend:0, lastPrice:2, totalSpent:0, staked:0}
     ];
   }
 }
@@ -97,9 +105,12 @@ function initCoins(){
       <h2 id="name-${i}">${c.name}</h2>
       <p>Price: $<span id="price-${i}">${c.price.toFixed(2)}</span></p>
       <p>Owned: <span id="owned-${i}">${c.holdings.toFixed(4)}</span></p>
-      <p>Profit/Loss: $<span id="pl-${i}">${((c.price*c.holdings)-c.totalSpent).toFixed(2)}</span></p>
+      <p>Staked: <span id="staked-${i}">${c.staked.toFixed(4)}</span></p>
+      <p>Profit/Loss: $<span id="pl-${i}">${((c.price*(c.holdings+c.staked))-c.totalSpent).toFixed(2)}</span></p>
       <label>Buy Amount ($): <input type="number" min="1" value="10" id="amt-${i}"/></label>
-      <button onclick="buyByCash(${i})">Buy</button>
+      <button onclick="buyByCash(${i})">Buy $</button>
+      <button onclick="buyMax(${i})">Buy Max</button>
+      <button onclick="stakeCoin(${i})">Stake</button>
       <button onclick="sellAll(${i})">Sell All</button>
       <canvas id="chart-${i}"></canvas>
     `;
@@ -107,7 +118,7 @@ function initCoins(){
   });
 }
 
-// ---------- Buy/Sell by Cash ----------
+// ---------- Buy/Sell Functions ----------
 function buyByCash(i){
   let amt=parseFloat(document.getElementById(`amt-${i}`).value)||0;
   let spend=Math.min(amt, cash);
@@ -119,21 +130,66 @@ function buyByCash(i){
   updateCoins();
 }
 
+function buyMax(i){
+  let spend=cash;
+  if(spend<=0) return;
+  let qty=spend/coins[i].price;
+  coins[i].holdings+=qty;
+  coins[i].totalSpent+=spend;
+  cash=0;
+  updateCoins();
+}
+
 function sellAll(i){
-  cash+=coins[i].holdings*coins[i].price;
+  cash+=coins[i].holdings*coins[i].price + coins[i].staked*coins[i].price;
   coins[i].holdings=0;
+  coins[i].staked=0;
   coins[i].totalSpent=0;
   updateCoins();
 }
 
-// ---------- Update Coins ----------
+// ---------- Stake ----------
+function stakeCoin(i){
+  if(coins[i].holdings<=0) return;
+  coins[i].staked += coins[i].holdings;
+  coins[i].holdings = 0;
+  updateCoins();
+}
+
+// ---------- Tap to Earn ----------
+document.getElementById("tap-money").addEventListener("click",()=>{
+  cash += tapValue;
+  updateCoins();
+});
+
+// ---------- Upgrade Tap ----------
+document.getElementById("upgrade-tap").addEventListener("click",()=>{
+  if(cash >= tapUpgradeCost){
+    cash -= tapUpgradeCost;
+    tapValue *= 2;
+    tapUpgradeCost *= 2;
+    document.getElementById("upgrade-tap").innerText = `Upgrade Tap ($${tapUpgradeCost})`;
+    updateCoins();
+  } else alert("Not enough cash to upgrade!");
+});
+
+// ---------- Reset Game ----------
+document.getElementById("reset-game").addEventListener("click",()=>{
+  if(confirm("Reset all progress?")){
+    localStorage.removeItem(STORAGE_KEY);
+    location.reload();
+  }
+});
+
+// ---------- Update Coins & UI ----------
 function updateCoins(){
   let net=cash;
   coins.forEach((c,i)=>{
-    net+=c.holdings*c.price;
+    net+= (c.holdings+c.staked)*c.price;
     document.getElementById(`price-${i}`).innerText=c.price.toFixed(2);
     document.getElementById(`owned-${i}`).innerText=c.holdings.toFixed(4);
-    document.getElementById(`pl-${i}`).innerText=((c.price*c.holdings)-c.totalSpent).toFixed(2);
+    document.getElementById(`staked-${i}`).innerText=c.staked.toFixed(4);
+    document.getElementById(`pl-${i}`).innerText=((c.holdings+c.staked)*c.price-c.totalSpent).toFixed(2);
     const nameElem=document.getElementById(`name-${i}`);
     if(c.price>c.lastPrice) nameElem.style.color="lime";
     else if(c.price<c.lastPrice) nameElem.style.color="red";
@@ -142,37 +198,45 @@ function updateCoins(){
   });
   document.getElementById("cash").innerText=cash.toFixed(2);
   document.getElementById("networth").innerText=net.toFixed(2);
-
-  const portfolioElem=document.getElementById("portfolio-value");
-  portfolioElem.innerText=net.toFixed(2);
-  if(net>lastPortfolio) portfolioElem.style.color="lime";
-  else if(net<lastPortfolio) portfolioElem.style.color="red";
-  else portfolioElem.style.color="#fff";
-  lastPortfolio=net;
-  setTimeout(()=>portfolioElem.style.color="#fff",300);
-
-  let trendingCoin=coins.slice().sort((a,b)=>((b.price-b.lastPrice)/b.lastPrice)-((a.price-a.lastPrice)/a.lastPrice))[0];
-  document.getElementById("news").innerText=trendingCoin.name+" is trending on social media 🚀";
-
-  drawCharts();
+  document.getElementById("portfolio-value").innerText=net.toFixed(2);
   updatePortfolioChart();
   updateLeaderboard();
-  saveGame();
   updateSentiment();
+  checkAchievements(net);
+  saveGame();
 }
 
-// ---------- Market Sentiment ----------
-function updateSentiment(){
-  let avgTrend=coins.reduce((sum,c)=>sum+c.trend,0)/coins.length;
-  let text="Neutral";
-  if(avgTrend>0.02) text="Greed 🚀";
-  else if(avgTrend<-0.02) text="Fear 😱";
-  document.getElementById("sentiment").innerText="Market Sentiment: "+text;
+// ---------- Achievements ----------
+function showAchievement(text){
+  const banner = document.getElementById("achievement-banner");
+  banner.innerText = text;
+  banner.style.display = "block";
+  setTimeout(()=>banner.style.display="none",3000);
+}
+
+function checkAchievements(net){
+  const milestones = [1000,5000,10000,50000,100000];
+  milestones.forEach(m=>{
+    if(net>=m && !achievementsUnlocked.includes(m)){
+      achievementsUnlocked.push(m);
+      showAchievement(`Achievement Unlocked: Net Worth $${m}!`);
+    }
+  });
+}
+
+// ---------- Leaderboard ----------
+function updateLeaderboard(){
+  const leaderboard=coins.slice().sort((a,b)=> (b.holdings+b.staked)*b.price-(a.holdings+a.staked)*a.price);
+  const list=document.getElementById("leaderboard-list");
+  list.innerHTML="";
+  leaderboard.forEach(c=>{
+    list.innerHTML+=`<li>${c.name}: $${((c.holdings+c.staked)*c.price).toFixed(2)}</li>`;
+  });
 }
 
 // ---------- Portfolio Chart ----------
 function updatePortfolioChart(){
-  const net=cash+coins.reduce((sum,c)=>sum+c.holdings*c.price,0);
+  const net=cash+coins.reduce((sum,c)=>sum+(c.holdings+c.staked)*c.price,0);
   portfolioHistory.push(net);
   if(portfolioHistory.length>100) portfolioHistory.shift();
   const canvas=document.getElementById("portfolio-chart");
@@ -213,17 +277,15 @@ function drawCharts(){
   });
 }
 
-// ---------- Leaderboard ----------
-function updateLeaderboard(){
-  const leaderboard=coins.slice().sort((a,b)=> (b.holdings*b.price)-(a.holdings*a.price));
-  const list=document.getElementById("leaderboard-list");
-  list.innerHTML="";
-  leaderboard.forEach(c=>{
-    list.innerHTML+=`<li>${c.name}: $${(c.holdings*c.price).toFixed(2)}</li>`;
-  });
+// ---------- Market Sentiment & Random Events ----------
+function updateSentiment(){
+  let avgTrend=coins.reduce((sum,c)=>sum+c.trend,0)/coins.length;
+  let text="Neutral";
+  if(avgTrend>0.02) text="Greed 🚀";
+  else if(avgTrend<-0.02) text="Fear 😱";
+  document.getElementById("sentiment").innerText="Market Sentiment: "+text;
 }
 
-// ---------- Random Events ----------
 function randomEvent(){
   let c=coins[Math.floor(Math.random()*coins.length)];
   let eventType=Math.random();
@@ -242,20 +304,6 @@ function randomEvent(){
   }
 }
 
-// ---------- Tap to Earn ----------
-document.getElementById("tap-money").addEventListener("click",()=>{
-  cash+=5;
-  updateCoins();
-});
-
-// ---------- Reset Game ----------
-document.getElementById("reset-game").addEventListener("click",()=>{
-  if(confirm("Reset all progress?")){
-    localStorage.removeItem(STORAGE_KEY);
-    location.reload();
-  }
-});
-
 // ---------- Game Loop ----------
 function updateGame(){
   coins.forEach(c=>{
@@ -266,10 +314,10 @@ function updateGame(){
     c.price=Math.max(c.price,0.01);
     c.history.push(c.price);
     if(c.history.length>50) c.history.shift();
-    // Mean reversion
-    c.price += (c.basePrice-c.price)*0.001;
+    c.price += (c.basePrice-c.price)*0.001; // mean reversion
   });
   updateCoins();
+  drawCharts();
 }
 
 initCoins();
