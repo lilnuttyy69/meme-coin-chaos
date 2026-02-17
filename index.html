@@ -4,359 +4,306 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Meme Coin Chaos</title>
 <style>
-body { font-family: Arial; background:#111; color:#fff; text-align:center; margin:0; }
-.coin { margin:12px auto; padding:8px; border:1px solid #444; width:90%; max-width:420px; border-radius:5px; }
-button { margin:3px; padding:4px 8px; background:#555; color:white; border:none; border-radius:4px; }
-button:hover { background:#777; }
-input { width:70px; text-align:center; }
-canvas { background:black; width:100%; height:100px; }
-#news,#sentiment,#leaderboard,#portfolio-container,#achievements {
-background:#222; margin:10px auto; padding:8px; width:90%; max-width:420px; border-radius:5px;
+body{
+  font-family: Arial;
+  background:#111;
+  color:#fff;
+  text-align:center;
 }
-#achievement-banner { display:none; background:#444; padding:6px; border-radius:4px; }
+.coin{
+  margin:10px;
+  padding:10px;
+  border:1px solid #333;
+}
+button{
+  margin:3px;
+}
+input{
+  width:70px;
+}
 </style>
 </head>
 <body>
 
 <h1>Meme Coin Chaos</h1>
 
-<div id="news">Market stable... for now.</div>
+<div id="news">Market stable...</div>
 <div id="sentiment">Market Sentiment: Neutral</div>
 
-<h3>Cash: $<span id="cash">0</span></h3>
-<h3>Net Worth: $<span id="networth">0</span></h3>
+<h3>Cash: $<span id="cash">1000</span></h3>
+<h3>Net Worth: $<span id="networth">1000</span></h3>
 
-<button id="tap-money"></button>
-<button id="upgrade-tap"></button>
-<button onclick="prestige()">Prestige</button>
-<button onclick="resetGame()">Reset</button>
-
-<div id="portfolio-container">
-<h3>Portfolio: $<span id="portfolio-value">0</span></h3>
-<canvas id="portfolio-chart"></canvas>
-</div>
-
-<div id="achievements">
-<h3>Achievements</h3>
-<div id="achievement-banner"></div>
-</div>
-
-<div id="leaderboard">
-<h3>Leaderboard</h3>
-<ol id="leaderboard-list"></ol>
-</div>
+<button onclick="tapIncome()">Tap for $<span id="tapValue">5</span></button>
+<button onclick="upgradeTap()">Upgrade Tap ($<span id="upgradeCost">100</span>)</button>
 
 <div id="coins"></div>
 
 <script>
 
-// ------------------ GLOBALS ------------------
-
-const STORAGE_KEY = "memeCoinChaosV3";
+const TRANSACTION_FEE = 0.01;
+const PRICE_CAP_MULTIPLIER = 50;
 
 let cash = 1000;
-let tapValue = 5;
-let tapUpgradeCost = 1000;
-let prestigeLevel = 0;
-let prestigeMultiplier = 1;
-
-let portfolioHistory = [];
-let achievementsUnlocked = [];
-let achievementQueue = [];
-let showingAchievement = false;
+let tapAmount = 5;
+let tapLevel = 1;
+let upgradeCost = 100;
 
 let crashActive = false;
 let lastCrashDelay = 0;
 let marketGreedLevel = 0;
 let lastWhaleCrashTime = 0;
-const WHALE_CRASH_COOLDOWN = 60 * 60 * 1000;
-const TRANSACTION_FEE = 0.01;
-const STAKE_YIELD = 0.002;
+const WHALE_COOLDOWN = 60*60*1000;
 
 let coins = [
-{name:"DogeLordX", basePrice:1, price:1, volatility:0.05, holdings:0, staked:0, trend:0, history:[], totalSpent:0},
-{name:"QuantumPepe", basePrice:2, price:2, volatility:0.07, holdings:0, staked:0, trend:0, history:[], totalSpent:0},
-{name:"MoonRaccoon", basePrice:0.5, price:0.5, volatility:0.1, holdings:0, staked:0, trend:0, history:[], totalSpent:0},
-{name:"AstroCat", basePrice:0.8, price:0.8, volatility:0.06, holdings:0, staked:0, trend:0, history:[], totalSpent:0},
-{name:"RoboFrog", basePrice:1.5, price:1.5, volatility:0.08, holdings:0, staked:0, trend:0, history:[], totalSpent:0},
-{name:"GalaxyDog", basePrice:2, price:2, volatility:0.05, holdings:0, staked:0, trend:0, history:[], totalSpent:0}
+ {name:"DogeLordX", price:1, basePrice:1, volatility:0.03, trend:0, holdings:0, staked:0, totalSpent:0},
+ {name:"QuantumPepe", price:2, basePrice:2, volatility:0.025, trend:0, holdings:0, staked:0, totalSpent:0},
+ {name:"MoonRaccoon", price:0.5, basePrice:0.5, volatility:0.04, trend:0, holdings:0, staked:0, totalSpent:0},
+ {name:"NebulaCat", price:3, basePrice:3, volatility:0.02, trend:0, holdings:0, staked:0, totalSpent:0},
+ {name:"FrogChain", price:0.8, basePrice:0.8, volatility:0.035, trend:0, holdings:0, staked:0, totalSpent:0},
+ {name:"PixelShiba", price:1.5, basePrice:1.5, volatility:0.03, trend:0, holdings:0, staked:0, totalSpent:0}
 ];
 
-// ------------------ INIT ------------------
-
-function initCoins(){
-const container=document.getElementById("coins");
-container.innerHTML="";
-coins.forEach((c,i)=>{
-container.innerHTML+=`
-<div class="coin">
-<h2 onclick="showCoinInfo(${i})" style="cursor:pointer">${c.name} ⓘ</h2>
-<p>Price: $<span id="price-${i}">0</span></p>
-<p>Owned: <span id="owned-${i}">0</span> | Staked: <span id="staked-${i}">0</span></p>
-<p>P/L: $<span id="pl-${i}">0</span></p>
-<input type="number" id="amt-${i}" value="10">
-<button onclick="buyByCash(${i})">Buy $</button>
-<button onclick="buyMax(${i})">Buy Max</button>
-<button onclick="stakeCoin(${i})">Stake</button>
-<button onclick="unstakeCoin(${i})">Unstake</button>
-<button onclick="sellAll(${i})">Sell All</button>
-<canvas id="chart-${i}"></canvas>
-</div>`;
-});
+function saveGame(){
+  localStorage.setItem("memeSave", JSON.stringify({
+    cash,tapAmount,tapLevel,upgradeCost,coins
+  }));
 }
 
-initCoins();
-
-// ------------------ TAP SYSTEM ------------------
-
-function updateTapButtons(){
-document.getElementById("tap-money").innerText=`Tap $${tapValue * prestigeMultiplier}`;
-document.getElementById("upgrade-tap").innerText=`Upgrade Tap ($${tapUpgradeCost})`;
+function loadGame(){
+  let data = localStorage.getItem("memeSave");
+  if(!data) return;
+  let save = JSON.parse(data);
+  cash = save.cash;
+  tapAmount = save.tapAmount;
+  tapLevel = save.tapLevel;
+  upgradeCost = save.upgradeCost;
+  coins = save.coins;
 }
 
-document.getElementById("tap-money").onclick=()=>{
-cash += tapValue * prestigeMultiplier;
-updateGameUI();
-};
-
-document.getElementById("upgrade-tap").onclick=()=>{
-if(cash>=tapUpgradeCost){
-cash-=tapUpgradeCost;
-tapValue*=2;
-tapUpgradeCost=Math.floor(tapUpgradeCost*2.2);
-updateTapButtons();
-updateGameUI();
-}
-};
-
-updateTapButtons();
-
-// ------------------ BUY / SELL ------------------
-
-function buyByCash(i){
-let amt=parseFloat(document.getElementById(`amt-${i}`).value)||0;
-let spend=Math.min(amt,cash);
-if(spend<=0) return;
-
-let slippage=spend>(cash*0.1)?1+(Math.random()*0.02):1;
-let fee=spend*TRANSACTION_FEE;
-let qty=(spend-fee)/slippage/coins[i].price;
-
-coins[i].holdings+=qty;
-coins[i].totalSpent+=spend;
-cash-=spend;
-updateGameUI();
+function tapIncome(){
+  cash += tapAmount;
+  updateUI();
 }
 
-function buyMax(i){
-if(cash<=0) return;
-let spend=cash;
-let fee=spend*TRANSACTION_FEE;
-let qty=(spend-fee)/coins[i].price;
-coins[i].holdings+=qty;
-coins[i].totalSpent+=spend;
-cash=0;
-updateGameUI();
+function upgradeTap(){
+  if(cash < upgradeCost) return;
+  cash -= upgradeCost;
+  tapLevel++;
+  tapAmount = 5 * tapLevel;
+  upgradeCost = Math.floor(upgradeCost * 1.8);
+  updateUI();
+}
+
+function buy(i){
+  let qty = parseFloat(document.getElementById(`qty-${i}`).value);
+  if(isNaN(qty)||qty<=0) return;
+
+  let totalCost = qty * coins[i].price * (1+TRANSACTION_FEE);
+
+  if(totalCost > cash){
+    qty = cash/(coins[i].price*(1+TRANSACTION_FEE));
+  }
+
+  if(qty<=0) return;
+
+  let cost = qty*coins[i].price;
+  let fee = cost*TRANSACTION_FEE;
+
+  cash -= (cost+fee);
+  coins[i].holdings += qty;
+  coins[i].totalSpent += (cost+fee);
+
+  updateUI();
+}
+
+function buyDollar(i){
+  let dollars = parseFloat(document.getElementById(`dollar-${i}`).value);
+  if(isNaN(dollars)||dollars<=0) return;
+
+  if(dollars > cash) dollars = cash;
+
+  let qty = dollars/(coins[i].price*(1+TRANSACTION_FEE));
+  let cost = qty*coins[i].price;
+  let fee = cost*TRANSACTION_FEE;
+
+  cash -= (cost+fee);
+  coins[i].holdings += qty;
+  coins[i].totalSpent += (cost+fee);
+
+  updateUI();
+}
+
+function sell(i){
+  let qty = parseFloat(document.getElementById(`qty-${i}`).value);
+  if(isNaN(qty)||qty<=0) return;
+
+  if(qty > coins[i].holdings) qty = coins[i].holdings;
+  if(qty<=0) return;
+
+  let gross = qty*coins[i].price;
+  let fee = gross*TRANSACTION_FEE;
+
+  cash += (gross-fee);
+
+  let totalCoins = coins[i].holdings+coins[i].staked;
+  if(totalCoins>0){
+    let ratio = qty/totalCoins;
+    coins[i].totalSpent *= (1-ratio);
+  }
+
+  coins[i].holdings -= qty;
+
+  updateUI();
 }
 
 function sellAll(i){
-let total=coins[i].holdings+coins[i].staked;
-if(total<=0) return;
-let gross=total*coins[i].price;
-let fee=gross*TRANSACTION_FEE;
-cash+=gross-fee;
-coins[i].holdings=0;
-coins[i].staked=0;
-coins[i].totalSpent=0;
-updateGameUI();
+  let qty = coins[i].holdings;
+  if(qty<=0) return;
+
+  let gross = qty*coins[i].price;
+  let fee = gross*TRANSACTION_FEE;
+
+  cash += (gross-fee);
+
+  let totalCoins = coins[i].holdings+coins[i].staked;
+  if(totalCoins>0){
+    let ratio = qty/totalCoins;
+    coins[i].totalSpent *= (1-ratio);
+  }
+
+  coins[i].holdings = 0;
+
+  updateUI();
 }
 
-// ------------------ STAKING ------------------
+function stake(i){
+  let qty = parseFloat(document.getElementById(`qty-${i}`).value);
+  if(isNaN(qty)||qty<=0) return;
+  if(qty>coins[i].holdings) qty=coins[i].holdings;
 
-function stakeCoin(i){
-if(coins[i].holdings<=0) return;
-coins[i].staked+=coins[i].holdings;
-coins[i].holdings=0;
-updateGameUI();
+  coins[i].holdings-=qty;
+  coins[i].staked+=qty;
+  updateUI();
 }
 
-function unstakeCoin(i){
-if(coins[i].staked<=0) return;
-coins[i].holdings+=coins[i].staked;
-coins[i].staked=0;
-updateGameUI();
+function unstake(i){
+  let qty = parseFloat(document.getElementById(`qty-${i}`).value);
+  if(isNaN(qty)||qty<=0) return;
+  if(qty>coins[i].staked) qty=coins[i].staked;
+
+  coins[i].staked-=qty;
+  coins[i].holdings+=qty;
+  updateUI();
 }
 
-// ------------------ MARKET LOGIC ------------------
+function updatePrices(){
+  coins.forEach(c=>{
+    c.trend += (Math.random()-0.5)*0.01;
+    let change = (c.trend + (Math.random()-0.5)*c.volatility)*c.price;
+    c.price += change;
 
-function updateMarket(){
-coins.forEach(c=>{
-c.trend+=(Math.random()-0.5)*0.01;
-let change=(c.trend+(Math.random()-0.5)*c.volatility)*c.price;
-c.price+=change;
-c.price+=(c.basePrice-c.price)*0.001;
-c.price=Math.max(c.price,0.01);
-if(c.price>c.basePrice*50) c.price=c.basePrice*50;
-if(c.staked>0){
-c.staked+=c.staked*STAKE_YIELD;
-}
-c.history.push(c.price);
-if(c.history.length>50) c.history.shift();
-});
-}
+    if(c.price < 0.01) c.price=0.01;
+    if(c.price > c.basePrice*PRICE_CAP_MULTIPLIER)
+      c.price = c.basePrice*PRICE_CAP_MULTIPLIER;
+  });
 
-// ------------------ SENTIMENT ------------------
+  updateSentiment();
+  updateUI();
+}
 
 function updateSentiment(){
-let avg=coins.reduce((s,c)=>s+c.trend,0)/coins.length;
-marketGreedLevel=avg*20;
-let text="Neutral";
-if(marketGreedLevel>0.6) text="Extreme Greed 🚀🚀";
-else if(marketGreedLevel>0.2) text="Greed 🚀";
-else if(marketGreedLevel<-0.6) text="Extreme Fear 😱😱";
-else if(marketGreedLevel<-0.2) text="Fear 😱";
-document.getElementById("sentiment").innerText="Market Sentiment: "+text;
+  let avg = coins.reduce((a,c)=>a+c.trend,0)/coins.length;
+  marketGreedLevel = avg*20;
+
+  let text="Neutral";
+  if(marketGreedLevel>0.6) text="Extreme Greed 🚀";
+  else if(marketGreedLevel>0.2) text="Greed";
+  else if(marketGreedLevel<-0.6) text="Extreme Fear";
+  else if(marketGreedLevel<-0.2) text="Fear";
+
+  document.getElementById("sentiment").innerText="Market Sentiment: "+text;
 }
 
-// ------------------ CRASH SYSTEM ------------------
+function triggerCrash(source){
+  if(crashActive) return;
+  crashActive=true;
 
-function triggerMarketCrash(source="normal"){
-if(crashActive) return;
-crashActive=true;
+  let strength=0.3+Math.random()*0.2;
+  coins.forEach(c=>c.price*=1-strength);
 
-let strength=0.25+Math.random()*0.25;
+  document.getElementById("news").innerText=
+    source==="whale"?"Whale Crash!":"Market Crash!";
 
-document.getElementById("news").innerText=
-source==="whale"?
-"🐋 Whale Liquidity Shock!":
-"⚠️ GLOBAL MARKET CRASH!";
-
-coins.forEach(c=>{
-c.price*=(1-strength);
-});
-
-updateGameUI();
-
-setTimeout(()=>{crashActive=false;},10000);
+  setTimeout(()=>crashActive=false,10000);
 }
 
-function scheduleNextCrash(){
-let min=6*60*1000;
-let max=15*60*1000;
-let delay;
-do{
-delay=Math.floor(Math.random()*(max-min))+min;
-}while(delay===lastCrashDelay);
-lastCrashDelay=delay;
+function scheduleCrash(){
+  let min=6*60*1000;
+  let max=15*60*1000;
+  let delay;
+  do{
+    delay=Math.floor(Math.random()*(max-min))+min;
+  }while(delay===lastCrashDelay);
+  lastCrashDelay=delay;
 
-setTimeout(()=>{
-let chance=0.25;
-if(marketGreedLevel>0.6) chance+=0.4;
-if(Math.random()<chance){
-triggerMarketCrash("normal");
+  setTimeout(()=>{
+    let chance=0.25;
+    if(marketGreedLevel>0.6) chance+=0.4;
+    if(Math.random()<chance) triggerCrash("normal");
+    scheduleCrash();
+  },delay);
 }
-scheduleNextCrash();
-},delay);
-}
-
-scheduleNextCrash();
-
-// ------------------ WHALE BOT ------------------
 
 function whaleBot(){
-let now=Date.now();
-let canCrash=(now-lastWhaleCrashTime)>WHALE_CRASH_COOLDOWN;
-let c=coins[Math.floor(Math.random()*coins.length)];
-
-if(canCrash && !crashActive && Math.random()<0.2){
-lastWhaleCrashTime=now;
-triggerMarketCrash("whale");
-return;
+  let now=Date.now();
+  if(now-lastWhaleCrashTime>WHALE_COOLDOWN && Math.random()<0.2 && !crashActive){
+    lastWhaleCrashTime=now;
+    triggerCrash("whale");
+    return;
+  }
 }
 
-let direction=Math.random()>0.5?1:-1;
-c.price+=direction*(c.price*0.15*(0.5+Math.random()));
-document.getElementById("news").innerText=
-direction>0?`🐋 Whale pumped ${c.name}!`:
-`🐋 Whale dumped ${c.name}!`;
+function updateUI(){
+  let net=cash;
+  let container=document.getElementById("coins");
+  container.innerHTML="";
 
-updateGameUI();
+  coins.forEach((c,i)=>{
+    net+= (c.holdings+c.staked)*c.price;
+
+    container.innerHTML+=`
+    <div class="coin">
+      <h3>${c.name}</h3>
+      <p>Price: $${c.price.toFixed(2)}</p>
+      <p>Liquid: ${c.holdings.toFixed(2)}</p>
+      <p>Staked: ${c.staked.toFixed(2)}</p>
+
+      <input id="qty-${i}" type="number" placeholder="Coins">
+      <button onclick="buy(${i})">Buy</button>
+      <button onclick="sell(${i})">Sell</button>
+      <button onclick="sellAll(${i})">Sell All</button>
+      <button onclick="stake(${i})">Stake</button>
+      <button onclick="unstake(${i})">Unstake</button>
+
+      <br><input id="dollar-${i}" type="number" placeholder="$ amount">
+      <button onclick="buyDollar(${i})">Buy $</button>
+    </div>
+    `;
+  });
+
+  document.getElementById("cash").innerText=cash.toFixed(2);
+  document.getElementById("networth").innerText=net.toFixed(2);
+  document.getElementById("tapValue").innerText=tapAmount;
+  document.getElementById("upgradeCost").innerText=upgradeCost;
+
+  saveGame();
 }
 
+loadGame();
+setInterval(updatePrices,1000);
 setInterval(whaleBot,20000);
-
-// ------------------ PRESTIGE ------------------
-
-function prestige(){
-let net=getNetWorth();
-if(net<1000000){
-alert("Need $1,000,000 net worth.");
-return;
-}
-prestigeLevel++;
-prestigeMultiplier+=0.5;
-cash=1000;
-coins.forEach(c=>{
-c.price=c.basePrice;
-c.holdings=0;
-c.staked=0;
-c.totalSpent=0;
-c.history=[];
-});
-document.getElementById("news").innerText=`Prestige Level ${prestigeLevel}!`;
-updateGameUI();
-}
-
-// ------------------ UI ------------------
-
-function getNetWorth(){
-return cash+coins.reduce((s,c)=>s+(c.holdings+c.staked)*c.price,0);
-}
-
-function updateGameUI(){
-updateSentiment();
-let net=getNetWorth();
-document.getElementById("cash").innerText=cash.toFixed(2);
-document.getElementById("networth").innerText=net.toFixed(2);
-document.getElementById("portfolio-value").innerText=net.toFixed(2);
-
-coins.forEach((c,i)=>{
-document.getElementById(`price-${i}`).innerText=c.price.toFixed(2);
-document.getElementById(`owned-${i}`).innerText=c.holdings.toFixed(4);
-document.getElementById(`staked-${i}`).innerText=c.staked.toFixed(4);
-document.getElementById(`pl-${i}`).innerText=((c.holdings+c.staked)*c.price-c.totalSpent).toFixed(2);
-});
-}
-
-function showCoinInfo(i){
-let c=coins[i];
-alert(
-`${c.name}
-
-Base Price: $${c.basePrice}
-Current Price: $${c.price.toFixed(2)}
-Max Cap: $${(c.basePrice*50).toFixed(2)}
-Volatility: ${(c.volatility*100).toFixed(2)}%
-Trend: ${(c.trend*100).toFixed(2)}%
-Staked: ${c.staked.toFixed(4)}
-Total Invested: $${c.totalSpent.toFixed(2)}`
-);
-}
-
-function resetGame(){
-localStorage.clear();
-location.reload();
-}
-
-// ------------------ GAME LOOP ------------------
-
-function gameLoop(){
-updateMarket();
-updateGameUI();
-}
-
-setInterval(gameLoop,1000);
-updateGameUI();
+scheduleCrash();
+updateUI();
 
 </script>
 </body>
