@@ -1,0 +1,199 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Meme Coin Chaos</title>
+<style>
+body {
+  font-family: Arial;
+  background: #111;
+  color: #fff;
+  text-align: center;
+}
+.coin {
+  margin: 20px;
+  padding: 10px;
+  border: 1px solid #444;
+}
+button {
+  padding: 5px 10px;
+  margin: 5px;
+}
+input {
+  margin: 5px;
+}
+canvas {
+  margin-top: 10px;
+  background: #000;
+}
+</style>
+</head>
+<body>
+
+<h1>Meme Coin Chaos</h1>
+<h3>Cash: $<span id="cash">1000</span></h3>
+<h3>Net Worth: $<span id="networth">1000</span></h3>
+
+<div id="coins"></div>
+
+<script>
+let cash = 1000;
+
+let coins = [
+  { name: "DogeLordX", price: 1, volatility: 0.2, hype: 1, history: [], holdings: 0, trend: 0 },
+  { name: "QuantumPepe", price: 2, volatility: 0.3, hype: 1, history: [], holdings: 0, trend: 0 },
+  { name: "MoonRaccoon", price: 0.5, volatility: 0.5, hype: 1, history: [], holdings: 0, trend: 0 }
+];
+
+function updatePrices() {
+  coins.forEach(c => {
+    c.trend += (Math.random() - 0.5) * 0.02;
+
+    let change =
+      (c.trend + (Math.random() - 0.5) * c.volatility) *
+      c.price *
+      c.hype;
+
+    c.price += change;
+
+    if (c.price < 0.01) c.price = 0.01;
+
+    c.history.push(c.price);
+    if (c.history.length > 50) c.history.shift();
+  });
+
+  render();
+}
+
+function render() {
+  let container = document.getElementById("coins");
+  container.innerHTML = "";
+
+  let net = cash;
+
+  coins.forEach((c, index) => {
+    net += c.holdings * c.price;
+
+    container.innerHTML += `
+      <div class="coin">
+        <h2>${c.name}</h2>
+        <p>Price: $${c.price.toFixed(2)}</p>
+        <p>Owned: ${c.holdings}</p>
+
+        <input type="number" min="1" value="1" id="qty-${index}" style="width:60px;" />
+        <br>
+
+        <button onclick="buy(${index})">Buy</button>
+        <button onclick="sell(${index})">Sell</button>
+        <button onclick="buyMax(${index})">Buy Max</button>
+        <button onclick="sellAll(${index})">Sell All</button>
+
+        <canvas id="chart-${index}" width="300" height="100"></canvas>
+      </div>
+    `;
+  });
+
+  document.getElementById("cash").innerText = cash.toFixed(2);
+  document.getElementById("networth").innerText = net.toFixed(2);
+
+  drawCharts();
+}
+
+function drawCharts() {
+  coins.forEach((c, index) => {
+    let canvas = document.getElementById(`chart-${index}`);
+    let ctx = canvas.getContext("2d");
+
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+    if (c.history.length < 2) return;
+
+    let maxPrice = Math.max(...c.history);
+    let minPrice = Math.min(...c.history);
+    let range = maxPrice - minPrice;
+    if (range === 0) range = 1;
+
+    ctx.beginPath();
+
+    c.history.forEach((price, i) => {
+      let x = (i / c.history.length) * canvas.width;
+      let y = canvas.height - ((price - minPrice) / range) * canvas.height;
+
+      if (i === 0) ctx.moveTo(x, y);
+      else ctx.lineTo(x, y);
+    });
+
+    ctx.strokeStyle = "lime";
+    ctx.stroke();
+  });
+}
+
+function buy(i) {
+  let qty = parseInt(document.getElementById(`qty-${i}`).value);
+  if (!qty || qty <= 0) return;
+
+  let cost = coins[i].price * qty;
+
+  if (cash >= cost) {
+    cash -= cost;
+    coins[i].holdings += qty;
+  }
+
+  render();
+}
+
+function sell(i) {
+  let qty = parseInt(document.getElementById(`qty-${i}`).value);
+  if (!qty || qty <= 0) return;
+
+  if (coins[i].holdings >= qty) {
+    cash += coins[i].price * qty;
+    coins[i].holdings -= qty;
+  }
+
+  render();
+}
+
+function buyMax(i) {
+  let maxQty = Math.floor(cash / coins[i].price);
+
+  if (maxQty > 0) {
+    coins[i].holdings += maxQty;
+    cash -= maxQty * coins[i].price;
+  }
+
+  render();
+}
+
+function sellAll(i) {
+  cash += coins[i].holdings * coins[i].price;
+  coins[i].holdings = 0;
+
+  render();
+}
+
+function randomEvent() {
+  let coin = coins[Math.floor(Math.random() * coins.length)];
+  let eventType = Math.random();
+
+  if (eventType < 0.4) {
+    coin.hype = 3;
+    setTimeout(() => coin.hype = 1, 5000);
+  } 
+  else if (eventType < 0.7) {
+    coin.price *= 0.3;
+  } 
+  else {
+    coin.volatility *= 2;
+    setTimeout(() => coin.volatility /= 2, 5000);
+  }
+}
+
+setInterval(updatePrices, 1000);
+setInterval(randomEvent, 15000);
+
+render();
+</script>
+
+</body>
+</html>
