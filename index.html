@@ -2,18 +2,20 @@
 <html>
 <head>
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Meme Coin Chaos – Mobile Friendly</title>
+<title>Meme Coin Chaos – Ultimate</title>
 <style>
 body { font-family: Arial; background:#111; color:#fff; text-align:center; margin:0; padding:0; }
 h1 { margin: 10px; }
 #news { background:#222; padding:10px; margin:10px auto; width:90%; max-width:400px; border-radius:5px; }
 #sentiment, #leaderboard, #portfolio-container { background:#333; padding:10px; margin:10px auto; width:90%; max-width:400px; border-radius:5px; text-align:left; }
-.coin { margin:20px auto; padding:10px; border:1px solid #444; border-radius:5px; width:90%; max-width:400px; }
+.coin { margin:20px auto; padding:10px; border:1px solid #444; border-radius:5px; width:90%; max-width:400px; transition: background-color 0.3s; }
 button { padding:5px 10px; margin:5px; border:none; border-radius:3px; background:#555; color:#fff; cursor:pointer; }
 button:hover { background:#777; }
 input { margin:5px; width:60px; border-radius:3px; border:1px solid #555; text-align:center; }
 canvas { margin-top:10px; background:#000; width:100%; height:100px; display:block; }
 #portfolio-chart { height:150px; }
+#tap-money { padding:10px 20px; margin:10px auto; display:block; background:#4CAF50; color:#fff; border-radius:5px; font-size:16px; }
+#tap-money:hover { background:#66bb6a; }
 </style>
 </head>
 <body>
@@ -28,34 +30,85 @@ canvas { margin-top:10px; background:#000; width:100%; height:100px; display:blo
 <h3>Cash: $<span id="cash">1000</span></h3>
 <h3>Net Worth: $<span id="networth">1000</span></h3>
 
+<button id="tap-money">Tap to Earn $5</button>
+
 <div id="coins"></div>
 
 <script>
+// ---------- Game state ----------
 let cash = 1000;
 let portfolioHistory = [];
 
 let coins = [
-  { name:"DogeLordX", price:1, volatility:0.2, hype:1, history:[], holdings:0, trend:0, leverage:1 },
-  { name:"QuantumPepe", price:2, volatility:0.3, hype:1, history:[], holdings:0, trend:0, leverage:1 },
-  { name:"MoonRaccoon", price:0.5, volatility:0.5, hype:1, history:[], holdings:0, trend:0, leverage:1 }
+  { name:"DogeLordX", price:1, volatility:0.2, hype:1, history:[], holdings:0, trend:0, leverage:1, lastPrice:1 },
+  { name:"QuantumPepe", price:2, volatility:0.3, hype:1, history:[], holdings:0, trend:0, leverage:1, lastPrice:2 },
+  { name:"MoonRaccoon", price:0.5, volatility:0.5, hype:1, history:[], holdings:0, trend:0, leverage:1, lastPrice:0.5 }
 ];
 
-// Update prices & trends
-function updatePrices() {
-  coins.forEach(c=>{
-    c.trend += (Math.random()-0.5)*0.02;
-    let change = (c.trend + (Math.random()-0.5)*c.volatility)*c.price*c.hype;
-    c.price += change;
-    if(c.price<0.01)c.price=0.01;
-    c.history.push(c.price);
-    if(c.history.length>50)c.history.shift();
+// ---------- Initialize coins once ----------
+function initCoins() {
+  let container = document.getElementById("coins");
+  container.innerHTML = "";
+  coins.forEach((c,i)=>{
+    let coinDiv = document.createElement("div");
+    coinDiv.className = "coin";
+    coinDiv.id = `coin-${i}`;
+    coinDiv.innerHTML = `
+      <h2 id="name-${i}">${c.name}</h2>
+      <p>Price: $<span id="price-${i}">${c.price.toFixed(2)}</span></p>
+      <p>Owned: <span id="owned-${i}">${c.holdings}</span></p>
+      <label>Qty: <input type="number" min="1" value="1" id="qty-${i}" /></label>
+      <label>Leverage: <input type="number" min="1" max="10" value="${c.leverage}" id="lev-${i}" /></label>
+      <br>
+      <button onclick="buy(${i})">Buy</button>
+      <button onclick="sell(${i})">Sell</button>
+      <button onclick="buyMax(${i})">Buy Max</button>
+      <button onclick="sellAll(${i})">Sell All</button>
+      <canvas id="chart-${i}"></canvas>
+    `;
+    container.appendChild(coinDiv);
   });
-  updateSentiment();
-  updatePortfolioHistory();
-  render();
 }
 
-// Market Sentiment
+// ---------- Update coins ----------
+function updateCoins() {
+  let net = cash;
+  coins.forEach((c,i)=>{
+    net += c.holdings*c.price;
+    document.getElementById(`price-${i}`).innerText = c.price.toFixed(2);
+    document.getElementById(`owned-${i}`).innerText = c.holdings;
+
+    let nameElem = document.getElementById(`name-${i}`);
+    let coinDiv = document.getElementById(`coin-${i}`);
+
+    if(c.price > c.lastPrice) {
+      nameElem.style.color = "lime";
+      coinDiv.style.backgroundColor = "#1a2";
+    } else if(c.price < c.lastPrice) {
+      nameElem.style.color = "red";
+      coinDiv.style.backgroundColor = "#a11";
+    } else {
+      nameElem.style.color = "#fff";
+      coinDiv.style.backgroundColor = "#222";
+    }
+
+    // Reset background after 300ms for subtle flash
+    setTimeout(()=>{ if(coinDiv) coinDiv.style.backgroundColor="#222"; }, 300);
+
+    c.lastPrice = c.price;
+  });
+
+  document.getElementById("cash").innerText = cash.toFixed(2);
+  document.getElementById("networth").innerText = net.toFixed(2);
+
+  let trendingCoin = coins[Math.floor(Math.random()*coins.length)];
+  document.getElementById("news").innerText = trendingCoin.name + " is trending on social media 🚀";
+
+  drawCharts();
+  updateLeaderboard();
+}
+
+// ---------- Market sentiment ----------
 function updateSentiment() {
   let avgTrend = coins.reduce((sum,c)=>sum+c.trend,0)/coins.length;
   let text="Neutral";
@@ -64,7 +117,7 @@ function updateSentiment() {
   document.getElementById("sentiment").innerText="Market Sentiment: "+text;
 }
 
-// Portfolio Graph
+// ---------- Portfolio chart ----------
 function updatePortfolioHistory() {
   let net = cash + coins.reduce((sum,c)=>sum+c.holdings*c.price,0);
   portfolioHistory.push(net);
@@ -72,13 +125,13 @@ function updatePortfolioHistory() {
   drawPortfolioChart();
 }
 function drawPortfolioChart() {
-  let canvas=document.getElementById("portfolio-chart");
-  let ctx=canvas.getContext("2d");
+  let canvas = document.getElementById("portfolio-chart");
+  let ctx = canvas.getContext("2d");
   ctx.clearRect(0,0,canvas.width,canvas.height);
   if(portfolioHistory.length<2) return;
-  let maxVal=Math.max(...portfolioHistory);
-  let minVal=Math.min(...portfolioHistory);
-  let range=maxVal-minVal||1;
+  let maxVal = Math.max(...portfolioHistory);
+  let minVal = Math.min(...portfolioHistory);
+  let range = maxVal-minVal||1;
   ctx.beginPath();
   portfolioHistory.forEach((val,i)=>{
     let x=(i/portfolioHistory.length)*canvas.width;
@@ -89,38 +142,7 @@ function drawPortfolioChart() {
   ctx.stroke();
 }
 
-// Render coins
-function render() {
-  let container=document.getElementById("coins");
-  container.innerHTML="";
-  let net=cash;
-  coins.forEach((c,i)=>{
-    net+=c.holdings*c.price;
-    container.innerHTML+=`
-    <div class="coin">
-      <h2>${c.name}</h2>
-      <p>Price: $${c.price.toFixed(2)}</p>
-      <p>Owned: ${c.holdings}</p>
-      <label>Qty: <input type="number" min="1" value="1" id="qty-${i}" /></label>
-      <label>Leverage: <input type="number" min="1" max="10" value="${c.leverage}" id="lev-${i}" /></label>
-      <br>
-      <button onclick="buy(${i})">Buy</button>
-      <button onclick="sell(${i})">Sell</button>
-      <button onclick="buyMax(${i})">Buy Max</button>
-      <button onclick="sellAll(${i})">Sell All</button>
-      <canvas id="chart-${i}"></canvas>
-    </div>
-    `;
-  });
-  document.getElementById("cash").innerText=cash.toFixed(2);
-  document.getElementById("networth").innerText=net.toFixed(2);
-  let trendingCoin = coins[Math.floor(Math.random()*coins.length)];
-  document.getElementById("news").innerText=trendingCoin.name+" is trending on social media 🚀";
-  drawCharts();
-  updateLeaderboard();
-}
-
-// Draw individual coin charts
+// ---------- Coin charts ----------
 function drawCharts() {
   coins.forEach((c,i)=>{
     let canvas=document.getElementById(`chart-${i}`);
@@ -141,89 +163,103 @@ function drawCharts() {
   });
 }
 
-// Leaderboard
+// ---------- Leaderboard ----------
 function updateLeaderboard() {
   let leaderboard = coins.slice().sort((a,b)=> (b.holdings*b.price)-(a.holdings*a.price));
-  let list=document.getElementById("leaderboard-list");
-  list.innerHTML="";
+  let list = document.getElementById("leaderboard-list");
+  list.innerHTML = "";
   leaderboard.forEach(c=>{
     list.innerHTML+=`<li>${c.name}: $${(c.holdings*c.price).toFixed(2)}</li>`;
   });
 }
 
-// Buy / Sell / Leverage functions
+// ---------- Buy / Sell / Leverage ----------
 function buy(i){
-  let qty=parseInt(document.getElementById(`qty-${i}`).value);
-  let lev=parseInt(document.getElementById(`lev-${i}`).value)||1;
+  let qty = parseInt(document.getElementById(`qty-${i}`).value);
+  let lev = parseInt(document.getElementById(`lev-${i}`).value)||1;
   if(!qty||qty<=0) return;
-  let cost=coins[i].price*qty/lev;
+  let cost = coins[i].price*qty/lev;
   if(cash>=cost){
-    cash-=cost;
-    coins[i].holdings+=qty;
-    coins[i].leverage=lev;
+    cash -= cost;
+    coins[i].holdings += qty;
+    coins[i].leverage = lev;
   }
   checkLiquidation(i);
-  render();
+  updateCoins();
 }
-
 function sell(i){
-  let qty=parseInt(document.getElementById(`qty-${i}`).value);
+  let qty = parseInt(document.getElementById(`qty-${i}`).value);
   if(!qty||qty<=0) return;
   if(coins[i].holdings>=qty){
-    cash+=coins[i].price*qty;
-    coins[i].holdings-=qty;
+    cash += coins[i].price*qty;
+    coins[i].holdings -= qty;
   }
-  render();
+  updateCoins();
 }
-
 function buyMax(i){
-  let lev=parseInt(document.getElementById(`lev-${i}`).value)||1;
-  let maxQty=Math.floor(cash/coins[i].price*lev);
+  let lev = parseInt(document.getElementById(`lev-${i}`).value)||1;
+  let maxQty = Math.floor(cash/coins[i].price*lev);
   if(maxQty>0){
-    coins[i].holdings+=maxQty;
-    cash-=maxQty*coins[i].price/lev;
-    coins[i].leverage=lev;
+    coins[i].holdings += maxQty;
+    cash -= maxQty*coins[i].price/lev;
+    coins[i].leverage = lev;
   }
   checkLiquidation(i);
-  render();
+  updateCoins();
 }
-
 function sellAll(i){
-  cash+=coins[i].holdings*coins[i].price;
-  coins[i].holdings=0;
-  coins[i].leverage=1;
-  render();
+  cash += coins[i].holdings*coins[i].price;
+  coins[i].holdings = 0;
+  coins[i].leverage = 1;
+  updateCoins();
 }
 
-// Liquidation risk
+// ---------- Liquidation ----------
 function checkLiquidation(i){
-  let c=coins[i];
-  if(c.holdings*c.price<(c.holdings*c.price)/c.leverage*0.5){
+  let c = coins[i];
+  if(c.holdings*c.price < (c.holdings*c.price)/c.leverage*0.5){
     alert(`${c.name} position liquidated due to leverage!`);
-    cash+=c.holdings*c.price*0.5;
-    c.holdings=0;
-    c.leverage=1;
+    cash += c.holdings*c.price*0.5;
+    c.holdings = 0;
+    c.leverage = 1;
   }
 }
 
-// Random market events
+// ---------- Random events ----------
 function randomEvent(){
-  let c=coins[Math.floor(Math.random()*coins.length)];
-  let eventType=Math.random();
-  if(eventType<0.4){
-    c.hype=3;
-    setTimeout(()=>c.hype=1,5000);
-  } else if(eventType<0.7){
-    c.price*=0.3;
-  } else{
-    c.volatility*=2;
-    setTimeout(()=>c.volatility/=2,5000);
-  }
+  let c = coins[Math.floor(Math.random()*coins.length)];
+  let eventType = Math.random();
+  if(eventType<0.4){ c.hype=3; setTimeout(()=>c.hype=1,5000); }
+  else if(eventType<0.7){ c.price*=0.3; }
+  else{ c.volatility*=2; setTimeout(()=>c.volatility/=2,5000); }
 }
 
-setInterval(updatePrices,1000);
+// ---------- Tap to earn $5 ----------
+document.getElementById("tap-money").addEventListener("click", ()=>{
+  cash += 5;
+  updateCoins();
+});
+
+// ---------- Auto-update coin prices ----------
+function updateGame() {
+  coins.forEach(c=>{
+    c.trend += (Math.random()-0.5)*0.02;
+    let change = (c.trend + (Math.random()-0.5)*c.volatility)*c.price*c.hype;
+    c.price += change;
+    if(c.price<0.01)c.price=0.01;
+    c.history.push(c.price);
+    if(c.history.length>50)c.history.shift();
+  });
+  updateSentiment();
+  updatePortfolioHistory();
+  updateCoins();
+}
+
+// ---------- Start the game ----------
+initCoins();
+updateCoins();
+setInterval(updateGame,1000);
 setInterval(randomEvent,15000);
-render();
 </script>
 
 </body>
