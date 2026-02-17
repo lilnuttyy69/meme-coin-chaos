@@ -7,73 +7,50 @@
 <style>
 body{
   font-family:Arial;
-  background:#101010;
+  background:#111;
   color:white;
   text-align:center;
 }
 
-.topbar{
+h1{ margin:10px; }
+
+#stats{
   margin:10px;
 }
 
-select{
-  padding:5px;
-}
-
-#tapBtn{
-  font-size:28px;
-  padding:25px 60px;
-  margin:20px auto;
-  display:block;
-}
-
 .coin{
-  border:1px solid #333;
-  margin:6px;
-  padding:6px;
-  font-size:14px;
+  border:1px solid #444;
+  margin:8px auto;
+  padding:8px;
+  width:320px;
+  background:#181818;
+}
+
+.coin h3{
+  margin:4px;
+}
+
+button{
+  margin:3px;
 }
 
 input{
   width:70px;
 }
 
-.portfolio{
-  border:1px solid #444;
-  padding:8px;
-  width:260px;
-  margin:10px auto;
-  font-size:13px;
+canvas{
+  background:#000;
+  margin-top:6px;
 }
 </style>
 </head>
-
 <body>
 
 <h1>Meme Coin Chaos</h1>
 
-<div class="topbar">
-<select onchange="openMenu(this.value)">
-  <option value="">Menu</option>
-  <option value="achievements">Achievements</option>
-  <option value="leaderboard">Leaderboard</option>
-  <option value="prestige">Prestige</option>
-  <option value="reset">Reset Game</option>
-</select>
-</div>
-
-<div id="news">Market stable...</div>
-<div id="sentiment">Sentiment: Neutral</div>
-
-<h3>Cash: $<span id="cash">1000</span></h3>
-<h3>Net Worth: $<span id="networth">1000</span></h3>
-
-<button id="tapBtn" onclick="tapIncome()">TAP +$<span id="tapValue">5</span></button>
-<button onclick="upgradeTap()">Upgrade Tap ($<span id="upgradeCost">100</span>)</button>
-
-<div class="portfolio" id="portfolioBox">
-Portfolio
-<div id="portfolioData"></div>
+<div id="stats">
+  Cash: $<span id="cash">1000</span> |
+  Net Worth: $<span id="networth">1000</span>
 </div>
 
 <div id="coins"></div>
@@ -81,78 +58,143 @@ Portfolio
 <script>
 
 const FEE = 0.01;
-const PRICE_CAP_MULT = 20;
+const MAX_HISTORY = 60;
 
 let cash = 1000;
-let tapLevel = 1;
-let tapValue = 5;
-let upgradeCost = 100;
-
-let prestigeLevel = 0;
-let prestigeMultiplier = 1;
-
-let crashActive = false;
-let lastWhaleCrash = 0;
-const WHALE_COOLDOWN = 60*60*1000;
-
-let marketGreed = 0;
 
 let coins = [
-{name:"DogeLordX", base:1, price:1, vol:0.02, trend:0, holdings:0, staked:0, totalSpent:0},
-{name:"QuantumPepe", base:2, price:2, vol:0.018, trend:0, holdings:0, staked:0, totalSpent:0},
-{name:"MoonRaccoon", base:0.5, price:0.5, vol:0.025, trend:0, holdings:0, staked:0, totalSpent:0},
-{name:"NebulaCat", base:3, price:3, vol:0.015, trend:0, holdings:0, staked:0, totalSpent:0},
-{name:"FrogChain", base:0.8, price:0.8, vol:0.022, trend:0, holdings:0, staked:0, totalSpent:0},
-{name:"PixelShiba", base:1.5, price:1.5, vol:0.02, trend:0, holdings:0, staked:0, totalSpent:0}
+ {name:"DogeLordX", base:1, price:1, vol:0.02, holdings:0, staked:0, totalSpent:0, history:[]},
+ {name:"QuantumPepe", base:2, price:2, vol:0.018, holdings:0, staked:0, totalSpent:0, history:[]},
+ {name:"MoonRaccoon", base:0.5, price:0.5, vol:0.025, holdings:0, staked:0, totalSpent:0, history:[]}
 ];
 
-function tapIncome(){
-  cash += tapValue * prestigeMultiplier;
-  updateUI();
+function saveGame(){
+  localStorage.setItem("memeSave", JSON.stringify({cash,coins}));
 }
 
-function upgradeTap(){
-  if(cash < upgradeCost) return;
-  cash -= upgradeCost;
-  tapLevel++;
-  tapValue = 5 * tapLevel;
-  upgradeCost = Math.floor(upgradeCost * 1.8);
-  updateUI();
+function loadGame(){
+  let data = localStorage.getItem("memeSave");
+  if(!data) return;
+  let save = JSON.parse(data);
+  cash = save.cash;
+  coins = save.coins;
+}
+
+function renderCoins(){
+  let container = document.getElementById("coins");
+  container.innerHTML = "";
+
+  coins.forEach((c,i)=>{
+    container.innerHTML += `
+      <div class="coin">
+        <h3 id="name-${i}">${c.name}</h3>
+        <div>Price: $<span id="price-${i}">${c.price.toFixed(2)}</span></div>
+        <div>Liquid: <span id="hold-${i}">${c.holdings.toFixed(2)}</span></div>
+        <div>Staked: <span id="stake-${i}">${c.staked.toFixed(2)}</span></div>
+
+        <input id="qty-${i}" type="number" value="15">
+
+        <div>
+          <button onclick="buy(${i})">Buy</button>
+          <button onclick="buyMax(${i})">Buy Max</button>
+          <button onclick="sell(${i})">Sell</button>
+          <button onclick="sellMax(${i})">Sell Max</button>
+        </div>
+
+        <div>
+          <button onclick="stake(${i})">Stake</button>
+          <button onclick="unstake(${i})">Unstake</button>
+        </div>
+
+        <canvas id="chart-${i}" width="300" height="80"></canvas>
+      </div>
+    `;
+  });
+}
+
+function updateUI(){
+  let net = cash;
+
+  coins.forEach((c,i)=>{
+    net += (c.holdings + c.staked) * c.price;
+
+    document.getElementById(`price-${i}`).innerText = c.price.toFixed(2);
+    document.getElementById(`hold-${i}`).innerText = c.holdings.toFixed(2);
+    document.getElementById(`stake-${i}`).innerText = c.staked.toFixed(2);
+  });
+
+  document.getElementById("cash").innerText = cash.toFixed(2);
+  document.getElementById("networth").innerText = net.toFixed(2);
+
+  drawCharts();
+  saveGame();
 }
 
 function buy(i){
-  let qtyInput = document.getElementById(`qty-${i}`);
-  let qty = parseFloat(qtyInput.value);
+  let input = document.getElementById(`qty-${i}`);
+  let qty = parseFloat(input.value);
   if(!qty || qty<=0) return;
 
-  let totalCost = qty*coins[i].price*(1+FEE);
+  let totalCost = qty * coins[i].price * (1+FEE);
+
   if(totalCost > cash){
-    qty = cash/(coins[i].price*(1+FEE));
+    qty = cash / (coins[i].price*(1+FEE));
   }
 
   if(qty<=0) return;
 
-  let cost = qty*coins[i].price;
-  let fee = cost*FEE;
+  let cost = qty * coins[i].price;
+  let fee = cost * FEE;
 
   cash -= (cost+fee);
   coins[i].holdings += qty;
   coins[i].totalSpent += (cost+fee);
 
-  qtyInput.value = 15;
+  input.value = 15;
 
   updateUI();
 }
 
-function sellAll(i){
-  let liquid = coins[i].holdings;
-  if(liquid<=0) return;
+function buyMax(i){
+  let qty = cash / (coins[i].price*(1+FEE));
+  if(qty<=0) return;
 
-  let gross = liquid*coins[i].price;
-  let fee = gross*FEE;
+  let cost = qty * coins[i].price;
+  let fee = cost * FEE;
+
+  cash -= (cost+fee);
+  coins[i].holdings += qty;
+  coins[i].totalSpent += (cost+fee);
+
+  updateUI();
+}
+
+function sell(i){
+  let input = document.getElementById(`qty-${i}`);
+  let qty = parseFloat(input.value);
+  if(!qty || qty<=0) return;
+
+  if(qty > coins[i].holdings) qty = coins[i].holdings;
+
+  let gross = qty * coins[i].price;
+  let fee = gross * FEE;
 
   cash += (gross-fee);
+  coins[i].holdings -= qty;
 
+  input.value = 15;
+
+  updateUI();
+}
+
+function sellMax(i){
+  let qty = coins[i].holdings;
+  if(qty<=0) return;
+
+  let gross = qty * coins[i].price;
+  let fee = gross * FEE;
+
+  cash += (gross-fee);
   coins[i].holdings = 0;
 
   updateUI();
@@ -182,172 +224,52 @@ function unstake(i){
 
 function updatePrices(){
   coins.forEach(c=>{
-
     let meanPull = (c.base - c.price)*0.002;
     let shock = (Math.random()-0.5)*c.vol;
-
-    c.trend *= 0.95;
-
-    let change = (meanPull + shock + c.trend)*c.price;
-    c.price += change;
+    c.price += (meanPull + shock)*c.price;
 
     if(c.price<0.01) c.price=0.01;
 
-    let cap = c.base*PRICE_CAP_MULT;
-    if(c.price>cap){
-      c.price = cap;
-      c.trend -= 0.05;
-    }
+    c.history.push(c.price);
+    if(c.history.length>MAX_HISTORY) c.history.shift();
   });
 
-  updateSentiment();
   updateUI();
 }
 
-function updateSentiment(){
-  let avgTrend = coins.reduce((a,c)=>a+c.trend,0)/coins.length;
-  marketGreed = avgTrend*20;
-
-  let text="Neutral";
-  if(marketGreed>0.6) text="Extreme Greed";
-  else if(marketGreed>0.2) text="Greed";
-  else if(marketGreed<-0.6) text="Extreme Fear";
-  else if(marketGreed<-0.2) text="Fear";
-
-  document.getElementById("sentiment").innerText="Sentiment: "+text;
-}
-
-function triggerCrash(source){
-  if(crashActive) return;
-  crashActive=true;
-
-  let strength = 0.25+Math.random()*0.2;
-
-  coins.forEach(c=>{
-    c.price *= (1-strength);
-  });
-
-  document.getElementById("news").innerText=
-    source==="whale"?"Whale Flash Crash!":"Market Crash!";
-
-  setTimeout(()=>crashActive=false,10000);
-}
-
-function scheduleCrash(){
-  let min=6*60*1000;
-  let max=15*60*1000;
-  let delay=Math.floor(Math.random()*(max-min))+min;
-
-  setTimeout(()=>{
-    let chance=0.15;
-    if(marketGreed>0.6) chance+=0.35;
-    if(Math.random()<chance) triggerCrash("normal");
-    scheduleCrash();
-  },delay);
-}
-
-function whaleBot(){
-  let now=Date.now();
-
-  if(!crashActive && now-lastWhaleCrash>WHALE_COOLDOWN){
-    if(Math.random()<0.1){
-      lastWhaleCrash=now;
-      triggerCrash("whale");
-      return;
-    }
-  }
-
-  let c=coins[Math.floor(Math.random()*coins.length)];
-  let direction=Math.random()>0.5?1:-1;
-  let impact=c.price*(0.02+Math.random()*0.02);
-
-  c.price+=direction*impact;
-}
-
-function distributeStaking(){
-  coins.forEach(c=>{
-    if(c.staked>0){
-      let apy=0.04;
-      let perSecond=apy/(365*24*60*60);
-      let reward=c.staked*perSecond;
-      c.holdings+=reward;
-    }
-  });
-}
-
-function updateUI(){
-
-  let net=cash;
-  let container=document.getElementById("coins");
-  container.innerHTML="";
-  let portfolioHTML="";
-
+function drawCharts(){
   coins.forEach((c,i)=>{
-    let total=c.holdings+c.staked;
-    let value=total*c.price;
-    net+=value;
+    let canvas = document.getElementById(`chart-${i}`);
+    let ctx = canvas.getContext("2d");
+    ctx.clearRect(0,0,canvas.width,canvas.height);
 
-    let avg=c.totalSpent>0?c.totalSpent/total:0;
-    let pl=value-c.totalSpent;
+    if(c.history.length<2) return;
 
-    portfolioHTML+=`
-    <div>${c.name}: ${total.toFixed(2)} | P/L: $${pl.toFixed(2)}</div>
-    `;
+    let max = Math.max(...c.history);
+    let min = Math.min(...c.history);
+    let range = max-min || 1;
 
-    container.innerHTML+=`
-    <div class="coin">
-      <b style="color:${c.price>c.base?'lime':'red'}">${c.name}</b>
-      <div>Price: $${c.price.toFixed(2)}</div>
-      <div>Liquid: ${c.holdings.toFixed(2)}</div>
-      <div>Staked: ${c.staked.toFixed(2)}</div>
+    ctx.beginPath();
 
-      <input id="qty-${i}" type="number" value="15">
-      <button onclick="buy(${i})">Buy</button>
-      <button onclick="sellAll(${i})">Sell Max</button>
-      <button onclick="stake(${i})">Stake</button>
-      <button onclick="unstake(${i})">Unstake</button>
-    </div>
-    `;
+    c.history.forEach((price,index)=>{
+      let x = (index/c.history.length)*canvas.width;
+      let y = canvas.height - ((price-min)/range)*canvas.height;
+
+      if(index===0) ctx.moveTo(x,y);
+      else ctx.lineTo(x,y);
+    });
+
+    ctx.strokeStyle =
+      c.history[c.history.length-1] >
+      c.history[c.history.length-2] ? "lime" : "red";
+
+    ctx.stroke();
   });
-
-  document.getElementById("portfolioData").innerHTML=portfolioHTML;
-  document.getElementById("cash").innerText=cash.toFixed(2);
-  document.getElementById("networth").innerText=net.toFixed(2);
-  document.getElementById("tapValue").innerText=tapValue;
-  document.getElementById("upgradeCost").innerText=upgradeCost;
 }
 
-function prestige(){
-  if(cash<100000) return;
-
-  prestigeLevel++;
-  prestigeMultiplier+=0.25;
-
-  cash=1000;
-  tapLevel=1;
-  tapValue=5;
-  upgradeCost=100;
-
-  coins.forEach(c=>{
-    c.price=c.base;
-    c.holdings=0;
-    c.staked=0;
-    c.totalSpent=0;
-  });
-
-  updateUI();
-}
-
-function openMenu(option){
-  if(option==="prestige") prestige();
-  if(option==="reset") location.reload();
-}
-
+loadGame();
+renderCoins();
 setInterval(updatePrices,1000);
-setInterval(whaleBot,20000);
-setInterval(distributeStaking,1000);
-
-scheduleCrash();
 updateUI();
 
 </script>
